@@ -29,21 +29,27 @@ app.post('/generate-text', async (req, res) => {
   }
 });
 
-app.post('generate-image',upload.single('image')),async(req,res)=>{
-  const prompt= req.body.prompt;
-  const image= imageToGenerativePart(req.file.path);
+// Generate Image (contoh template, tergantung dukungan API)
+app.post('/generate-image', upload.single('image'), async (req, res) => {
+  const prompt = req.body.prompt;
+  const imageBuffer = fs.readFileSync(req.file.path);
+  const base64image = imageBuffer.toString('base64');
+
+  const imagePart = {
+    inlineData: { data: base64image, mimeType: req.file.mimetype }
+  };
 
   try {
-    const result = await model.generateImage(prompt, image);
+    const result = await model.generateContent([prompt, imagePart]);
     const response = await result.response;
     res.json({ output: response.text() });
   } catch (err) {
     res.status(500).json({ error: err.message });
-  }finally{
+  } finally {
     fs.unlinkSync(req.file.path);
   }
-  
-};
+});
+
 
 app.post('/generate-from-document',upload.single('document'),async(req,res)=>{
  const filePath = req.file.path;
