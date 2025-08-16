@@ -1,93 +1,47 @@
-const express = require('express');
-const dotenv = require('dotenv');
-const { GoogleGenerativeAI } = require('@google/generative-ai'); 
-const multer = require('multer'); 
-const fs = require('fs');
-const path = require('path');
+const express = require("express");
+const multer = require("multer");
+const fs = require("fs");
+const dotenv = require("dotenv");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 dotenv.config();
 const app = express();
+const upload = multer({ dest: "uploads/" });
+
 app.use(express.json());
+app.use(express.static("public"));
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' }); 
-const upload=multer({dest:'uploads/'})
+const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-const PORT = 3000;
-app.listen(PORT, () => {
-  console.log(` Gemini Api Server is running at http://localhost:${PORT}`);
-});
-
-app.post('/generate-text', async (req, res) => {
-  const { prompt } = req.body;
+app.post("/chat", upload.array("files"), async (req, res) => {
   try {
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    res.json({ output: response.text() });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+    const { message } = req.body;
+    const parts = [];
 
-// Generate Image (contoh template, tergantung dukungan API)
-app.post('/generate-image', upload.single('image'), async (req, res) => {
-  const prompt = req.body.prompt;
-  const imageBuffer = fs.readFileSync(req.file.path);
-  const base64image = imageBuffer.toString('base64');
+    if (message) parts.push(message);
 
-  const imagePart = {
-    inlineData: { data: base64image, mimeType: req.file.mimetype }
-  };
-
-  try {
-    const result = await model.generateContent([prompt, imagePart]);
-    const response = await result.response;
-    res.json({ output: response.text() });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  } finally {
-    fs.unlinkSync(req.file.path);
-  }
-});
-
-
-app.post('/generate-from-document',upload.single('document'),async(req,res)=>{
- const filePath = req.file.path;
- const buffer = fs.readFileSync(filePath);
- const base64data = buffer.toString('base64');
- const mimtype = req.file.mimetype;
-
-try {
-  const documentPart ={
-    inlineData:{data:base64data,mimeType:mimtype}
-  };
-  const result = await model.generateContent(['analyze this document:',documentPart])
-  const response = await result.response;
-  res.json({ output: response.text() });
-}catch (err) {
-  res.status(500).json({ error: err.message });
-}finally{
-  fs.unlinkSync(req.file.path);
-}
-});
-
-app.post('/generate-from-audio',upload.single('audio'),async(req,res)=>{
-  const audioBuffer = fs.readFileSync(req.file.path);
-  const base64audio = audioBuffer.toString('base64');
-  const audioPart = {
-    inlineData: {
-      data: base64audio,
-      mimeType: req.file.mimetype
+    if (req.files && req.files.length > 0) {
+      for (const file of req.files) {
+        const buffer = fs.readFileSync(file.path);
+        parts.push({
+          inlineData: {
+            data: buffer.toString("base64"),
+            mimeType: file.mimetype,
+          },
+        });
+        fs.unlinkSync(file.path); // hapus file temp
+      }
     }
-  };
 
-  try {
-    const result = await model.generateContent(['transcribe or analyze this audio:', audioPart]);
+    const result = await model.generateContent(parts);
     const response = await result.response;
-    res.json({ output: response.text() });
+    res.json({ reply: response.text() });
   } catch (err) {
     res.status(500).json({ error: err.message });
-  } finally {
-    fs.unlinkSync(req.file.path);
   }
+});
+
+app.listen(3000, () => {
+  console.log("✅ Server jalan di http://localhost:3000");
 });
